@@ -1,0 +1,53 @@
+application:
+  subdomain: wikidocs
+  multi_instance: false
+  # WikiDocs v2 ships a self-service first-run initialization wizard: while the
+  # dataset is uninitialized, POST /api/initialize (public route) creates the
+  # administrator account with a user-chosen password; afterwards every write
+  # requires a JWT from POST /api/authenticate. That is a real account system,
+  # so public_path is enabled per the papra/servas precedent.
+  public_path:
+    - /
+  upstreams:
+    - location: /package-licenses/
+      backend: file:///lzcapp/pkg/content/licenses/
+    - location: /
+      backend: http://wikidocs:3210/
+services:
+  wikidocs:
+    # upstream: zavy86/wikidocs:2.0.2
+    image: docker.1ms.run/zavy86/wikidocs:2.0.2
+    environment:
+      # official compose default: public browsing (guest read token) + accounts
+      - MODE=public
+      # SECRET derives password hashes, session JWTs and attachment tokens;
+      # it MUST stay stable across container recreation or all accounts break.
+      - SECRET={{ printf "%x" (stable_secret "wikidocs_secret") }}
+      - DATASETS=/var/lib/wikidocs/datasets
+      - PORT=3210
+      - TZ=Asia/Shanghai
+    binds:
+      # all wiki data (markdown documents, accounts.json, settings.json,
+      # attachments) live in the DATASETS directory
+      - /lzcapp/var/data:/var/lib/wikidocs/datasets
+usage: |
+  WikiDocs 是一个隐私友好的 Markdown 知识库：全部内容以纯 Markdown 文件
+  存储（无数据库），支持命名空间、附件、KaTeX 公式、Mermaid 图表、页面
+  修订历史，并提供 REST API 与桌面端同步。
+
+  使用方法：
+  1. 首次打开应用会出现初始化向导：填写站点标题与管理员账号（邮箱 +
+     密码），提交后即创建管理员账号并完成初始化。
+  2. 之后登录管理员账号即可创建/编辑页面；访客以只读方式浏览（上游
+     MODE=public 的默认行为，与官方 compose 一致）。
+  3. 桌面端可在设置里填本应用地址与账号做双向同步；API 文档见 /api/ 。
+
+  数据与安全：
+  - 全部数据保存在 /lzcapp/var/data（Markdown 文件 + accounts.json 等），
+    卸载应用会一并删除，请定期备份该目录。
+  - SECRET 环境变量参与密码哈希与会话签发，已固定为随机值（容器重建
+    不会变化），请勿手动修改。
+  - 许可为 MIT，正文见 /package-licenses/ 。
+
+  说明：
+  - 本包未做实机验证，功能以官方文档为准，遇到问题请反馈。
